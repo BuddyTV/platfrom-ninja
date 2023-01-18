@@ -21,6 +21,8 @@
 #include <climits>
 #include <stdint.h>
 #include <functional>
+#include <ctime>
+#include <cmath>
 
 #if defined(__SVR4) && defined(__sun)
 #include <sys/termios.h>
@@ -568,6 +570,76 @@ void Plan::Dump() const {
   printf("ready: %d\n", (int)ready_.size());
 }
 
+struct VizioLog {
+  const int kDelayAfterStartCommand = 5; //log will be showed only after 5 sec
+  const int kSpinnerSymbols = 4;
+  const char* kWaitSpinSymb[4] = {"/", "|", "\\", "—"};
+  void HideCursor();
+  void ShowCursor();
+  bool IsTimePassedAfterStart();
+  string FormatTargetName(string name);
+  string GetActiveEdgesInString(const vector<Edge*>& edges);
+  void ShowActiveBuildProcess(const vector<Edge*>& edges);
+  private:
+    friend struct RealCommandRunner;
+};
+
+string VizioLog::FormatTargetName(string name){
+  string::size_type pos = name.find("___");
+  if (pos != string::npos) {
+    name = name.substr(0, pos);
+    pos = name.rfind("_");
+    if (pos != string::npos) {
+      name = name.substr(pos+1);
+    }
+  }
+  return name;
+}
+
+bool VizioLog::IsTimePassedAfterStart() {
+  static time_t start_time = time(NULL);
+  if (start_time == 0) {
+    return true;
+  }
+
+  time_t curr_time = time(NULL);
+  if (curr_time - start_time >= kDelayAfterStartCommand) {
+    start_time = 0;
+    return true;
+  }
+  return false;
+}
+
+void VizioLog::HideCursor() {
+  printf("\e[?25l");
+}
+
+void VizioLog::ShowCursor() {
+  printf("\e[?25h");
+}
+
+string VizioLog::GetActiveEdgesInString(const vector<Edge*>& edges)
+{
+  string stringOfActiveTargets;
+  for (auto e = edges.begin(); e != edges.end(); ++e) {
+    stringOfActiveTargets += FormatTargetName((*e)->rule_->name());
+    stringOfActiveTargets += ", ";
+  }
+  stringOfActiveTargets.erase(stringOfActiveTargets.length()-2); //Delete last coma
+  return stringOfActiveTargets;
+}
+
+void VizioLog::ShowActiveBuildProcess(const vector<Edge*>& edges) {
+  HideCursor();
+  if(IsTimePassedAfterStart()) {
+    string stringOfActiveTargets = GetActiveEdgesInString(edges);
+    for (int i = 0; i < kSpinnerSymbols; i++) {
+      printf("Build process (%s) %s\r", stringOfActiveTargets.c_str(), kWaitSpinSymb[i]);
+    }
+  }
+  ShowCursor();
+}
+
 struct RealCommandRunner : public CommandRunner {
   explicit RealCommandRunner(const BuildConfig& config) : config_(config) {}
   virtual ~RealCommandRunner() {}
@@ -580,6 +652,7 @@ struct RealCommandRunner : public CommandRunner {
   const BuildConfig& config_;
   SubprocessSet subprocs_;
   map<const Subprocess*, Edge*> subproc_to_edge_;
+  VizioLog processLogger_;
 };
 
 vector<Edge*> RealCommandRunner::GetActiveEdges() {
@@ -629,6 +702,7 @@ bool RealCommandRunner::StartCommand(Edge* edge) {
 bool RealCommandRunner::WaitForCommand(Result* result) {
   Subprocess* subproc;
   while ((subproc = subprocs_.NextFinished()) == NULL) {
+    processLogger_.ShowActiveBuildProcess(GetActiveEdges());
     bool interrupted = subprocs_.DoWork();
     if (interrupted)
       return false;
