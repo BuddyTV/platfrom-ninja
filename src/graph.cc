@@ -301,6 +301,9 @@ bool DependencyScan::RecomputeOutputDirty(const Edge* edge,
   if (!output->exists()) {
     EXPLAIN("output %s doesn't exist", output->path().c_str());
     return true;
+  } else if (skipCheckTimestamp_) {
+    EXPLAIN("output %s is used from cached", output->path().c_str());
+    return false;
   }
 
   BuildLog::LogEntry* entry = 0;

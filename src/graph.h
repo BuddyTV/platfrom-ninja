@@ -335,11 +335,13 @@ struct ImplicitDepLoader {
 struct DependencyScan {
   DependencyScan(State* state, BuildLog* build_log, DepsLog* deps_log,
                  DiskInterface* disk_interface,
-                 DepfileParserOptions const* depfile_parser_options)
+                 DepfileParserOptions const* depfile_parser_options,
+                 bool skipCheckTimestamp)
       : build_log_(build_log),
         disk_interface_(disk_interface),
         dep_loader_(state, deps_log, disk_interface, depfile_parser_options),
-        dyndep_loader_(state, disk_interface) {}
+        dyndep_loader_(state, disk_interface),
+        skipCheckTimestamp_(skipCheckTimestamp) {}
 
   /// Update the |dirty_| state of the given nodes by transitively inspecting
   /// their input edges.
@@ -387,6 +389,7 @@ struct DependencyScan {
   DiskInterface* disk_interface_;
   ImplicitDepLoader dep_loader_;
   DyndepLoader dyndep_loader_;
+  bool skipCheckTimestamp_;
 };
 
 // Implements a less comparison for edges by priority, where highest
