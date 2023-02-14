@@ -157,6 +157,7 @@ struct CommandRunner {
     Edge* edge;
     ExitStatus status;
     std::string output;
+    std::string formatEdgeName;
     bool success() const { return status == ExitSuccess; }
   };
   /// Wait for a command to complete, or return false if interrupted.
@@ -257,6 +258,7 @@ struct Builder {
   std::unique_ptr<Explanations> explanations_;
 
   DependencyScan scan_;
+  std::string failedEdges_;
 
   /// Keep the global exit code for the build
   ExitStatus exit_code_ = ExitSuccess;

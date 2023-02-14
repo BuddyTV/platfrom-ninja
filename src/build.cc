@@ -774,6 +774,7 @@ ExitStatus Builder::Build(string* err) {
       }
 
       if (!result.success()) {
+        failedEdges_ += " \"" + result.formatEdgeName + "\" ";
         if (failures_allowed)
           failures_allowed--;
       }
@@ -786,9 +787,9 @@ ExitStatus Builder::Build(string* err) {
     status_->BuildFinished();
     if (failures_allowed == 0) {
       if (config_.failures_allowed > 1)
-        *err = "subcommands failed";
+        *err = "subcommands failed\n ----- These parts have an errors: " + failedEdges_ + " -----";
       else
-        *err = "subcommand failed";
+        *err = "subcommand failed\n ----- This part has an error: " + failedEdges_ + " -----";
     } else if (failures_allowed < config_.failures_allowed)
       *err = "cannot make progress due to previous errors";
     else

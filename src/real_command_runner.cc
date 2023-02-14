@@ -19,15 +19,7 @@
 #include "subprocess.h"
 
 struct VizioLog {
-  const int kDelayAfterStartCommand = 5; //log will be showed only after 5 sec
-  const int kSpinnerSymbols = 4;
-  const char* kWaitSpinSymb[4] = {"/", "|", "\\", "—"};
-  void HideCursor();
-  void ShowCursor();
-  bool IsTimePassedAfterStart();
   std::string FormatTargetName(std::string name);
-  std::string GetActiveEdgesInString(const std::vector<Edge*>& edges);
-  void ShowActiveBuildProcess(const std::vector<Edge*>& edges);
   private:
     friend struct RealCommandRunner;
 };
@@ -42,50 +34,6 @@ std::string VizioLog::FormatTargetName(std::string name){
     }
   }
   return name;
-}
-
-bool VizioLog::IsTimePassedAfterStart() {
-  static time_t start_time = time(NULL);
-  if (start_time == 0) {
-    return true;
-  }
-
-  time_t curr_time = time(NULL);
-  if (curr_time - start_time >= kDelayAfterStartCommand) {
-    start_time = 0;
-    return true;
-  }
-  return false;
-}
-
-void VizioLog::HideCursor() {
-  printf("\e[?25l");
-}
-
-void VizioLog::ShowCursor() {
-  printf("\e[?25h");
-}
-
-std::string VizioLog::GetActiveEdgesInString(const std::vector<Edge*>& edges)
-{
-  std::string stringOfActiveTargets;
-  for (auto e = edges.begin(); e != edges.end(); ++e) {
-    stringOfActiveTargets += FormatTargetName((*e)->rule_->name());
-    stringOfActiveTargets += ", ";
-  }
-  stringOfActiveTargets.erase(stringOfActiveTargets.length()-2); //Delete last coma
-  return stringOfActiveTargets;
-}
-
-void VizioLog::ShowActiveBuildProcess(const vector<Edge*>& edges) {
-  HideCursor();
-  if(IsTimePassedAfterStart()) {
-    std::string stringOfActiveTargets = GetActiveEdgesInString(edges);
-    for (int i = 0; i < kSpinnerSymbols; i++) {
-      printf("Build process (%s) %s\r", stringOfActiveTargets.c_str(), kWaitSpinSymb[i]);
-    }
-  }
-  ShowCursor();
 }
 
 struct RealCommandRunner : public CommandRunner {
@@ -150,7 +98,6 @@ bool RealCommandRunner::StartCommand(Edge* edge) {
 bool RealCommandRunner::WaitForCommand(Result* result) {
   Subprocess* subproc;
   while ((subproc = subprocs_.NextFinished()) == NULL) {
-    processLogger_.ShowActiveBuildProcess(GetActiveEdges());
     bool interrupted = subprocs_.DoWork();
     if (interrupted)
       return false;
@@ -162,6 +109,9 @@ bool RealCommandRunner::WaitForCommand(Result* result) {
   std::map<const Subprocess*, Edge*>::iterator e =
       subproc_to_edge_.find(subproc);
   result->edge = e->second;
+  if(!result->success()) {
+    result->formatEdgeName = processLogger_.FormatTargetName(result->edge->rule_->name());
+  }
   subproc_to_edge_.erase(e);
 
   delete subproc;
