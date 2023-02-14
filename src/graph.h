@@ -329,11 +329,12 @@ struct DependencyScan {
   DependencyScan(State* state, BuildLog* build_log, DepsLog* deps_log,
                  DiskInterface* disk_interface,
                  DepfileParserOptions const* depfile_parser_options,
-                 Explanations* explanations)
+                 bool skipCheckTimestamp, Explanations* explanations)
       : build_log_(build_log), disk_interface_(disk_interface),
         dep_loader_(state, deps_log, disk_interface, depfile_parser_options,
                     explanations),
-        dyndep_loader_(state, disk_interface), explanations_(explanations) {}
+        dyndep_loader_(state, disk_interface), skipCheckTimestamp_(skipCheckTimestamp),
+        explanations_(explanations) {}
 
   /// Update the |dirty_| state of the given nodes by transitively inspecting
   /// their input edges.
@@ -383,6 +384,7 @@ struct DependencyScan {
   DiskInterface* disk_interface_;
   ImplicitDepLoader dep_loader_;
   DyndepLoader dyndep_loader_;
+  bool skipCheckTimestamp_;
   OptionalExplanations explanations_;
 };
 

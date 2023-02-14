@@ -226,9 +226,10 @@ void Usage(const BuildConfig& config) {
 "if targets are unspecified, builds the 'default' target (see manual).\n"
 "\n"
 "options:\n"
-"  --version      print ninja version (\"%s\")\n"
-"  -v, --verbose  show all command lines while building\n"
-"  --quiet        don't show progress status, just command output\n"
+"  --version         print ninja version (\"%s\")\n"
+"  -v, --verbose     show all command lines while building\n"
+"  --quiet           don't show progress status, just command output\n"
+"  --nochecktime  use cache for deps. Check if deps output is exist without checking timestamp\n"
 "\n"
 "  -C DIR   change to DIR before doing anything else\n"
 "  -f FILE  specify input build file [default=build.ninja]\n"
@@ -1632,12 +1633,13 @@ int ReadFlags(int* argc, char*** argv,
               Options* options, BuildConfig* config) {
   DeferGuessParallelism deferGuessParallelism(config);
 
-  enum { OPT_VERSION = 1, OPT_QUIET = 2 };
+  enum { OPT_VERSION = 1, OPT_QUIET = 2, OPT_NOCHECK = 3 };
   const option kLongOptions[] = {
     { "help", no_argument, NULL, 'h' },
     { "version", no_argument, NULL, OPT_VERSION },
     { "verbose", no_argument, NULL, 'v' },
     { "quiet", no_argument, NULL, OPT_QUIET },
+    { "nochecktime", no_argument, NULL, OPT_NOCHECK },
     { NULL, 0, NULL, 0 }
   };
 
@@ -1709,6 +1711,9 @@ int ReadFlags(int* argc, char*** argv,
       case OPT_VERSION:
         printf("%s\n", kNinjaVersion);
         return 0;
+      case OPT_NOCHECK:
+        config->skipCheckTimestamp = true;
+        break;
       case 'h':
       default:
         deferGuessParallelism.Refresh();

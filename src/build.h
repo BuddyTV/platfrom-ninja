@@ -172,7 +172,7 @@ struct CommandRunner {
 /// Options (e.g. verbosity, parallelism) passed to a build.
 struct BuildConfig {
   BuildConfig() : verbosity(NORMAL), dry_run(false), parallelism(1),
-                  failures_allowed(1), max_load_average(-0.0f) {}
+                  failures_allowed(1), max_load_average(-0.0f), skipCheckTimestamp(false) {}
 
   enum Verbosity {
     QUIET,  // No output -- used when testing.
@@ -187,6 +187,7 @@ struct BuildConfig {
   /// The maximum load average we must not exceed. A negative value
   /// means that we do not have any limit.
   double max_load_average;
+  bool skipCheckTimestamp;
   DepfileParserOptions depfile_parser_options;
 };
 

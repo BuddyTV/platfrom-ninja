@@ -62,6 +62,7 @@
 _arguments \
   '(- *)'{-h,--help}'[Show help]' \
   '(- *)--version[Print ninja version]' \
+  '(--nochecktime)[Allow building using outputs from cache]'
   '-C+[Change to directory before doing anything else]:directories:_directories' \
   '-f+[Specify input build file (default=build.ninja)]:files:_files' \
   '-j+[Run N jobs in parallel (default=number of CPUs available)]:number of jobs' \

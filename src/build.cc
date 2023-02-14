@@ -598,7 +598,8 @@ Builder::Builder(State* state, const BuildConfig& config, BuildLog* build_log,
       start_time_millis_(start_time_millis), disk_interface_(disk_interface),
       explanations_(g_explaining ? new Explanations() : nullptr),
       scan_(state, build_log, deps_log, disk_interface,
-            &config_.depfile_parser_options, explanations_.get()) {
+            &config_.depfile_parser_options, config_.skipCheckTimestamp,
+            explanations_.get()) {
   lock_file_path_ = ".ninja_lock";
   string build_dir = state_->bindings_.LookupVariable("builddir");
   if (!build_dir.empty())
