@@ -154,6 +154,7 @@ struct CommandRunner {
     Edge* edge;
     ExitStatus status;
     std::string output;
+    std::string formatEdgeName;
     bool success() const { return status == ExitSuccess; }
   };
   /// Wait for a command to complete, or return false if interrupted.
@@ -244,6 +245,7 @@ struct Builder {
   std::string lock_file_path_;
   DiskInterface* disk_interface_;
   DependencyScan scan_;
+  std::string failedEdges_;
 
   // Unimplemented copy ctor and operator= ensure we don't copy the auto_ptr.
   Builder(const Builder &other);        // DO NOT IMPLEMENT

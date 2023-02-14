@@ -571,21 +571,13 @@ void Plan::Dump() const {
 }
 
 struct VizioLog {
-  const int kDelayAfterStartCommand = 5; //log will be showed only after 5 sec
-  const int kSpinnerSymbols = 4;
-  const char* kWaitSpinSymb[4] = {"/", "|", "\\", "—"};
-  void HideCursor();
-  void ShowCursor();
-  bool IsTimePassedAfterStart();
   string FormatTargetName(string name);
-  string GetActiveEdgesInString(const vector<Edge*>& edges);
-  void ShowActiveBuildProcess(const vector<Edge*>& edges);
   private:
     friend struct RealCommandRunner;
 };
 
 string VizioLog::FormatTargetName(string name){
-  string::size_type pos = name.find("___");
+  string::size_type pos = name.rfind("___");
   if (pos != string::npos) {
     name = name.substr(0, pos);
     pos = name.rfind("_");
@@ -594,50 +586,6 @@ string VizioLog::FormatTargetName(string name){
     }
   }
   return name;
-}
-
-bool VizioLog::IsTimePassedAfterStart() {
-  static time_t start_time = time(NULL);
-  if (start_time == 0) {
-    return true;
-  }
-
-  time_t curr_time = time(NULL);
-  if (curr_time - start_time >= kDelayAfterStartCommand) {
-    start_time = 0;
-    return true;
-  }
-  return false;
-}
-
-void VizioLog::HideCursor() {
-  printf("\e[?25l");
-}
-
-void VizioLog::ShowCursor() {
-  printf("\e[?25h");
-}
-
-string VizioLog::GetActiveEdgesInString(const vector<Edge*>& edges)
-{
-  string stringOfActiveTargets;
-  for (auto e = edges.begin(); e != edges.end(); ++e) {
-    stringOfActiveTargets += FormatTargetName((*e)->rule_->name());
-    stringOfActiveTargets += ", ";
-  }
-  stringOfActiveTargets.erase(stringOfActiveTargets.length()-2); //Delete last coma
-  return stringOfActiveTargets;
-}
-
-void VizioLog::ShowActiveBuildProcess(const vector<Edge*>& edges) {
-  HideCursor();
-  if(IsTimePassedAfterStart()) {
-    string stringOfActiveTargets = GetActiveEdgesInString(edges);
-    for (int i = 0; i < kSpinnerSymbols; i++) {
-      printf("Build process (%s) %s\r", stringOfActiveTargets.c_str(), kWaitSpinSymb[i]);
-    }
-  }
-  ShowCursor();
 }
 
 struct RealCommandRunner : public CommandRunner {
@@ -702,7 +650,6 @@ bool RealCommandRunner::StartCommand(Edge* edge) {
 bool RealCommandRunner::WaitForCommand(Result* result) {
   Subprocess* subproc;
   while ((subproc = subprocs_.NextFinished()) == NULL) {
-    processLogger_.ShowActiveBuildProcess(GetActiveEdges());
     bool interrupted = subprocs_.DoWork();
     if (interrupted)
       return false;
@@ -713,6 +660,9 @@ bool RealCommandRunner::WaitForCommand(Result* result) {
 
   map<const Subprocess*, Edge*>::iterator e = subproc_to_edge_.find(subproc);
   result->edge = e->second;
+  if(!result->success()) {
+    result->formatEdgeName = processLogger_.FormatTargetName(result->edge->rule_->name());
+  }
   subproc_to_edge_.erase(e);
 
   delete subproc;
@@ -898,6 +848,7 @@ bool Builder::Build(string* err) {
       }
 
       if (!result.success()) {
+        failedEdges_ += " \"" + result.formatEdgeName + "\" ";
         if (failures_allowed)
           failures_allowed--;
       }
@@ -910,9 +861,9 @@ bool Builder::Build(string* err) {
     status_->BuildFinished();
     if (failures_allowed == 0) {
       if (config_.failures_allowed > 1)
-        *err = "subcommands failed";
+        *err = "subcommands failed\n ----- These parts have an errors: " + failedEdges_ + " -----";
       else
-        *err = "subcommand failed";
+        *err = "subcommand failed\n ----- This part has an error: " + failedEdges_ + " -----";
     } else if (failures_allowed < config_.failures_allowed)
       *err = "cannot make progress due to previous errors";
     else
