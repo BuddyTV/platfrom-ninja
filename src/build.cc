@@ -16,6 +16,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <climits>
@@ -23,6 +24,7 @@
 #include <functional>
 #include <ctime>
 #include <cmath>
+#include <sys/stat.h>
 
 #if defined(__SVR4) && defined(__sun)
 #include <sys/termios.h>
@@ -40,6 +42,7 @@
 #include "status.h"
 #include "subprocess.h"
 #include "util.h"
+#include "disk_interface.h"
 
 using namespace std;
 
@@ -639,7 +642,17 @@ size_t RealCommandRunner::CanRunMore() const {
 
 bool RealCommandRunner::StartCommand(Edge* edge) {
   string command = edge->EvaluateCommand();
-  Subprocess* subproc = subprocs_.Add(command, edge->use_console());
+  string file_path;
+
+  if (config_.logfiles_enabled) {
+    file_path = config_.logs_dir + "/" + processLogger_.FormatTargetName(edge->rule_->name()) + ".log";
+
+    ofstream logs_file(file_path);
+    logs_file << "Command: " << command << "\n\n";
+    logs_file.close();
+  }
+
+  Subprocess* subproc = subprocs_.Add(command, edge->use_console(), config_.enable_bufferization, file_path);
   if (!subproc)
     return false;
   subproc_to_edge_.insert(make_pair(subproc, edge));
@@ -656,7 +669,8 @@ bool RealCommandRunner::WaitForCommand(Result* result) {
   }
 
   result->status = subproc->Finish();
-  result->output = subproc->GetOutput();
+  if (config_.enable_bufferization)
+    result->output = subproc->GetOutput();
 
   map<const Subprocess*, Edge*>::iterator e = subproc_to_edge_.find(subproc);
   result->edge = e->second;
@@ -677,6 +691,12 @@ Builder::Builder(State* state, const BuildConfig& config,
       start_time_millis_(start_time_millis), disk_interface_(disk_interface),
       scan_(state, build_log, deps_log, disk_interface,
             &config_.depfile_parser_options, config_.skipCheckTimestamp) {
+
+  struct stat info;
+  if (config.logfiles_enabled && stat(config_.logs_dir.c_str(), &info ) != 0) {
+    disk_interface_->MakeDirs(config_.logs_dir);
+    std::cout << "[INFO] Logs dir: " << config_.logs_dir << '\n';
+  }
   lock_file_path_ = ".ninja_lock";
   string build_dir = state_->bindings_.LookupVariable("builddir");
   if (!build_dir.empty())

@@ -52,6 +52,7 @@ struct Subprocess {
 
  private:
   Subprocess(bool use_console);
+  Subprocess(bool use_console, bool bufferizied, std::string filename);
   bool Start(struct SubprocessSet* set, const std::string& command);
   void OnPipeReady();
 
@@ -72,6 +73,8 @@ struct Subprocess {
   pid_t pid_;
 #endif
   bool use_console_;
+  bool bufferizied_;
+  FILE* file_;
 
   friend struct SubprocessSet;
 };
@@ -83,7 +86,7 @@ struct SubprocessSet {
   SubprocessSet();
   ~SubprocessSet();
 
-  Subprocess* Add(const std::string& command, bool use_console = false);
+  Subprocess* Add(const std::string& command, bool use_console = false, bool bufferizied = false, std::string filename = "");
   bool DoWork();
   Subprocess* NextFinished();
   void Clear();

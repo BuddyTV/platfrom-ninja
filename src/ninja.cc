@@ -218,6 +218,8 @@ void Usage(const BuildConfig& config) {
 "options:\n"
 "  --version         print ninja version (\"%s\")\n"
 "  -v, --verbose     show all command lines while building\n"
+"  -L, --logfiles    enable logging into files\n"
+"  -b, --buffer      enable logs bufferization\n"
 "  --quiet           don't show progress status, just command output\n"
 "  --nochecktime  use cache for deps. Check if deps output is exist without checking timestamp\n"
 "\n"
@@ -1425,6 +1427,8 @@ int ReadFlags(int* argc, char*** argv,
     { "help", no_argument, NULL, 'h' },
     { "version", no_argument, NULL, OPT_VERSION },
     { "verbose", no_argument, NULL, 'v' },
+    { "logfiles", no_argument, NULL, 'L' },
+    { "buffer", no_argument, NULL, 'b' },
     { "quiet", no_argument, NULL, OPT_QUIET },
     { "nochecktime", no_argument, NULL, OPT_NOCHECK },
     { NULL, 0, NULL, 0 }
@@ -1432,7 +1436,7 @@ int ReadFlags(int* argc, char*** argv,
 
   int opt;
   while (!options->tool &&
-         (opt = getopt_long(*argc, *argv, "d:f:j:k:l:nt:vw:C:h", kLongOptions,
+         (opt = getopt_long(*argc, *argv, "d:f:j:k:l:nt:vLbw:C:h", kLongOptions,
                             NULL)) != -1) {
     switch (opt) {
       case 'd':
@@ -1494,6 +1498,12 @@ int ReadFlags(int* argc, char*** argv,
         break;
       case 'C':
         options->working_dir = optarg;
+        break;
+      case 'L':
+        config->logfiles_enabled = true;
+        break;
+      case 'b':
+        config->enable_bufferization = true;
         break;
       case OPT_VERSION:
         printf("%s\n", kNinjaVersion);
