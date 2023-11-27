@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <fstream>
 
 #include <climits>
 #include <functional>
@@ -27,6 +28,7 @@
 #if defined(__SVR4) && defined(__sun)
 #include <sys/termios.h>
 #endif
+#include <sys/stat.h>
 
 #include "build_log.h"
 #include "clparser.h"
@@ -41,6 +43,7 @@
 #include "state.h"
 #include "status.h"
 #include "util.h"
+#include "disk_interface.h"
 
 using namespace std;
 
@@ -600,6 +603,13 @@ Builder::Builder(State* state, const BuildConfig& config, BuildLog* build_log,
       scan_(state, build_log, deps_log, disk_interface,
             &config_.depfile_parser_options, config_.skipCheckTimestamp,
             explanations_.get()) {
+
+  struct stat info;
+  if (config.logfiles_enabled && stat(config_.logs_dir.c_str(), &info ) != 0) {
+    disk_interface_->MakeDirs(config_.logs_dir);
+    std::cout << "[INFO] Logs dir: " << config_.logs_dir << '\n';
+  }
+
   lock_file_path_ = ".ninja_lock";
   string build_dir = state_->bindings_.LookupVariable("builddir");
   if (!build_dir.empty())

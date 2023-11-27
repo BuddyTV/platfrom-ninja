@@ -18,8 +18,13 @@
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <queue>
+#include <sstream>
 #include <string>
 #include <vector>
+#include <iostream>
+#include <ctime>
+#include <time.h>
 
 #include "depfile_parser.h"
 #include "exit_status.h"
@@ -172,8 +177,25 @@ struct CommandRunner {
 
 /// Options (e.g. verbosity, parallelism) passed to a build.
 struct BuildConfig {
-  BuildConfig() : verbosity(NORMAL), dry_run(false), parallelism(1),
-                  failures_allowed(1), max_load_average(-0.0f), skipCheckTimestamp(false) {}
+  BuildConfig() : verbosity(NORMAL), dry_run(false), parallelism(1), logfiles_enabled(false), enable_bufferization(false),
+                  failures_allowed(1), max_load_average(-0.0f), skipCheckTimestamp(false)  {
+
+    const char* output_dir = std::getenv("OUTPUT_DIR");
+    const char* goal = std::getenv("MAKECMDGOALS");
+
+    auto t = std::time(nullptr);
+    auto time = *std::localtime(&t);
+
+    char time_buf[80];
+    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d_%H_%M_%S_UTC", &time);
+
+    std::stringstream dir;
+    dir << (output_dir ? output_dir : "out")
+        << "/build_logs/"
+        << (goal ? goal : "unknown_goal") << '_' << time_buf << '/';
+
+    logs_dir = dir.str();
+  }
 
   enum Verbosity {
     QUIET,  // No output -- used when testing.
@@ -184,12 +206,15 @@ struct BuildConfig {
   Verbosity verbosity;
   bool dry_run;
   int parallelism;
+  bool logfiles_enabled;
+  bool enable_bufferization;
   int failures_allowed;
   /// The maximum load average we must not exceed. A negative value
   /// means that we do not have any limit.
   double max_load_average;
   bool skipCheckTimestamp;
   DepfileParserOptions depfile_parser_options;
+  std::string logs_dir;
 };
 
 /// Builder wraps the build process: starting commands, updating status.

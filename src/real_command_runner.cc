@@ -14,6 +14,8 @@
 
 #include <ctime>
 #include <cmath>
+#include <fstream>
+#include <unordered_set>
 
 #include "build.h"
 #include "subprocess.h"
@@ -87,7 +89,17 @@ size_t RealCommandRunner::CanRunMore() const {
 
 bool RealCommandRunner::StartCommand(Edge* edge) {
   std::string command = edge->EvaluateCommand();
-  Subprocess* subproc = subprocs_.Add(command, edge->use_console());
+  std::string file_path;
+
+  if (config_.logfiles_enabled) {
+    file_path = config_.logs_dir + "/" + processLogger_.FormatTargetName(edge->rule_->name()) + ".log";
+
+    std::ofstream logs_file(file_path);
+    logs_file << "Command: " << command << "\n\n";
+    logs_file.close();
+  }
+
+  Subprocess* subproc = subprocs_.Add(command, edge->use_console(), config_.enable_bufferization, file_path);
   if (!subproc)
     return false;
   subproc_to_edge_.insert(std::make_pair(subproc, edge));
@@ -104,7 +116,8 @@ bool RealCommandRunner::WaitForCommand(Result* result) {
   }
 
   result->status = subproc->Finish();
-  result->output = subproc->GetOutput();
+  if (config_.enable_bufferization)
+    result->output = subproc->GetOutput();
 
   std::map<const Subprocess*, Edge*>::iterator e =
       subproc_to_edge_.find(subproc);

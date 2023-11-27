@@ -15,6 +15,7 @@
 #include "exit_status.h"
 #include "subprocess.h"
 
+#include <cstdio>
 #include <sys/select.h>
 #include <assert.h>
 #include <errno.h>
@@ -38,8 +39,14 @@ extern char** environ;
 using namespace std;
 
 Subprocess::Subprocess(bool use_console) : fd_(-1), pid_(-1),
-                                           use_console_(use_console) {
-}
+                                           use_console_(use_console),
+                                           bufferizied_(false), file_(NULL) {}
+
+Subprocess::Subprocess(bool use_console, bool bufferizied, const std::string &filename):
+    Subprocess(use_console) {
+      this->bufferizied_ = bufferizied;
+      file_ = fopen(filename.c_str(), "a");
+    }
 
 Subprocess::~Subprocess() {
   if (fd_ >= 0)
@@ -47,6 +54,9 @@ Subprocess::~Subprocess() {
   // Reap child if forgotten.
   if (pid_ != -1)
     Finish();
+
+  if (file_)
+    fclose(file_);
 }
 
 bool Subprocess::Start(SubprocessSet* set, const string& command) {
@@ -137,9 +147,16 @@ bool Subprocess::Start(SubprocessSet* set, const string& command) {
 
 void Subprocess::OnPipeReady() {
   char buf[4 << 10];
-  ssize_t len = read(fd_, buf, sizeof(buf));
+  int len = read(fd_, buf, sizeof(buf));
   if (len > 0) {
-    buf_.append(buf, len);
+    if (bufferizied_) {
+      buf_.append(buf, len);
+    } else {
+      printf("%.*s", len, buf);
+    }
+
+    if (file_)
+      fprintf(file_, "%.*s", len, buf);
   } else {
     if (len < 0)
       Fatal("read: %s", strerror(errno));
@@ -240,8 +257,8 @@ SubprocessSet::~SubprocessSet() {
     Fatal("sigprocmask: %s", strerror(errno));
 }
 
-Subprocess *SubprocessSet::Add(const string& command, bool use_console) {
-  Subprocess *subprocess = new Subprocess(use_console);
+Subprocess *SubprocessSet::Add(const std::string& command, bool use_console, bool bufferizied, std::string filename) {
+  Subprocess *subprocess = new Subprocess(use_console, bufferizied, filename);
   if (!subprocess->Start(this, command)) {
     delete subprocess;
     return 0;
