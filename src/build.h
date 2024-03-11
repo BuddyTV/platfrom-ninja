@@ -155,7 +155,8 @@ struct CommandRunner {
   virtual ~CommandRunner() {}
   virtual size_t CanRunMore() const = 0;
   virtual bool StartCommand(Edge* edge) = 0;
-
+  virtual void RunLoggerProcess() {}
+  virtual void StopWatcherProcess() {}
   /// The result of waiting for a command.
   struct Result {
     Result() : edge(NULL) {}

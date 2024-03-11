@@ -133,6 +133,9 @@ inline To FunctionCast(From from) {
 	memcpy(&result, &from, sizeof(To));
 	return result;
 }
+#else
+const std::string kCleanConsoleSymbol = "\033[0J";
+const std::string kCleanLineSymbol = "\033[0K";
 #endif
 
 int platformAwareUnlink(const char* filename);

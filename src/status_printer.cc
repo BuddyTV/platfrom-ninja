@@ -240,7 +240,7 @@ void StatusPrinter::BuildEdgeFinished(Edge* edge, int64_t start_time_millis,
       printer_.PrintOnNewLine(output);
     } else {
       std::string final_output = StripAnsiEscapeCodes(output);
-      printer_.PrintOnNewLine(final_output);
+      printer_.PrintOnNewLine(kCleanConsoleSymbol + final_output);
     }
 
 #ifdef _WIN32

@@ -184,6 +184,7 @@ else()
 	if(CMAKE_SYSTEM_NAME STREQUAL "AIX")
 		target_link_libraries(libninja PUBLIC "-lperfstat")
 	endif()
+	target_link_libraries(libninja PUBLIC pthread)
 endif()
 
 target_compile_features(libninja PUBLIC cxx_std_11)
@@ -298,7 +299,7 @@ if(BUILD_TESTING)
     endif()
   endif()
   find_package(Threads REQUIRED)
-  target_link_libraries(ninja_test PRIVATE libninja libninja-re2c GTest::gtest Threads::Threads)
+  target_link_libraries(ninja_test PRIVATE libninja libninja-re2c GTest::gtest Threads::Threads pthread)
 
   foreach(perftest
     build_log_perftest

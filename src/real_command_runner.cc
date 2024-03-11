@@ -16,15 +16,38 @@
 #include <cmath>
 #include <fstream>
 #include <unordered_set>
+#include <ctime>
+#include <cmath>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <thread>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "build.h"
+#include "elide_middle.h"
 #include "subprocess.h"
+
+using namespace std::chrono;
+using LogLine = std::tuple<pid_t, std::string, std::string>;
 
 struct VizioLog {
   std::string FormatTargetName(std::string name);
+  std::string& AddCleaningLine(std::string& data);
+  std::string getLastNotEmptyLine(std::string& buffer);
   private:
     friend struct RealCommandRunner;
 };
+
+std::string& VizioLog::AddCleaningLine(std::string& data){
+  return data.append(kCleanLineSymbol).append("\n");
+}
 
 std::string VizioLog::FormatTargetName(std::string name){
   std::string::size_type pos = name.find("___");
@@ -38,19 +61,129 @@ std::string VizioLog::FormatTargetName(std::string name){
   return name;
 }
 
+std::string VizioLog::getLastNotEmptyLine(std::string& buffer) {
+  auto found = buffer.size();
+  std::string currentStr = {};
+  do {
+    buffer = buffer.substr(0, found);
+    found = buffer.rfind("\n");
+    currentStr = buffer.substr(found+1);
+  } while (currentStr.empty());
+  // Buffer contains only one line
+  if (found == std::string::npos) {
+    return buffer;
+  }
+  // Get last part after \r
+  found = currentStr.rfind("\r");
+  if (found != std::string::npos) {
+    currentStr = currentStr.substr(found+1);
+  };
+
+  return currentStr;
+}
+
 struct RealCommandRunner : public CommandRunner {
   explicit RealCommandRunner(const BuildConfig& config) : config_(config) {}
+  virtual ~RealCommandRunner();
   size_t CanRunMore() const override;
   bool StartCommand(Edge* edge) override;
   bool WaitForCommand(Result* result) override;
   std::vector<Edge*> GetActiveEdges() override;
   void Abort() override;
+  void RunLoggerProcess();
+  void WatchBuildingProcess();
+  void StopWatcherProcess();
+  std::string CreateProgressBanner(const std::vector<LogLine>& progressBar);
 
   const BuildConfig& config_;
   SubprocessSet subprocs_;
   std::map<const Subprocess*, Edge*> subproc_to_edge_;
   VizioLog processLogger_;
+  std::thread watcherThread_;
+  std::mutex run_thread_mutex_;
+  std::condition_variable run_thread_cv_;
+  std::atomic_bool watcher_run_;
 };
+
+RealCommandRunner::~RealCommandRunner() {
+  if (watcherThread_.joinable()) {
+    watcherThread_.join();
+  }
+}
+
+std::string RealCommandRunner::CreateProgressBanner(const std::vector<LogLine>& progressBar) {
+  if (progressBar.empty())
+    return {};
+
+  std::string fullBanner;
+  int bufferLines = progressBar.size() + 2; // The first and last line of bunner ###
+  winsize size;
+  if ((ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0) && size.ws_col) {
+    std::string decorateLine = (std::string(size.ws_col, '#')).append("\n");
+    fullBanner.append(decorateLine);
+    for (auto const& [pid, name, log] : progressBar) {
+      std::string log_line("# " + std::to_string(pid) + " " + name + ": " + log);
+      ElideMiddleInPlace(log_line, size.ws_col);
+      fullBanner.append(log_line);
+    }
+    fullBanner.append(decorateLine);
+  }
+  return fullBanner + kCleanConsoleSymbol + "\033["+ std::to_string(bufferLines) + "A";
+}
+
+void RealCommandRunner::WatchBuildingProcess() {
+  while (watcher_run_) {
+
+    std::vector<LogLine> progressBar;
+    if (!subprocs_.running_.empty()) {
+      for (auto &subproc : subprocs_.running_ ) {
+        if (subproc->GetPID() > 0) {
+          auto e = subproc_to_edge_.find(subproc);
+          std::string processGoal = processLogger_.FormatTargetName(e->second->rule_->name());
+          std::string message;
+          switch (subproc->GetProcessStatus()) {
+            case Subprocess::ALIVE: {
+              std::string output = subproc->GetOutput();
+              message = output.empty() ? "Is starting..." : processLogger_.getLastNotEmptyLine(output);
+            }
+            break;
+            case Subprocess::SILENT: {
+              message = "Keep silence";
+            }
+            break;
+            case Subprocess::STUCK: {
+              message = "Process keep silence more than 5 minutes. You can kill it manually or keep waiting.";
+            }
+            break;
+            default:
+              std::cout << "ERROR: Wrong Process status" << std::endl;
+            break;
+          }
+          if (!message.empty()) {
+            progressBar.push_back(make_tuple(subproc->GetPID(), processGoal, processLogger_.AddCleaningLine(message)));
+          }
+        }
+      }
+    }
+    if (!progressBar.empty()) {
+      std::cout << CreateProgressBanner(progressBar);
+      progressBar.clear();
+    }
+
+    std::unique_lock<std::mutex> lock(run_thread_mutex_);
+    run_thread_cv_.wait_for(lock, std::chrono::seconds(1), [this]{return !watcher_run_;});
+  }
+}
+
+void RealCommandRunner::RunLoggerProcess() {
+  // Banner anavailable in sync or quiet mode and also when build running on remote servers
+  auto *env = std::getenv("NO_TTY");
+  std::string no_tty = (env != nullptr) ? env : "";
+  if (config_.verbosity == BuildConfig::VERBOSE && config_.enable_bufferization && no_tty != "1") {
+    watcher_run_ = true;
+    watcherThread_ = std::thread(&RealCommandRunner::WatchBuildingProcess, this);
+  }
+}
 
 std::vector<Edge*> RealCommandRunner::GetActiveEdges() {
   std::vector<Edge*> edges;
@@ -61,7 +194,13 @@ std::vector<Edge*> RealCommandRunner::GetActiveEdges() {
   return edges;
 }
 
+void RealCommandRunner::StopWatcherProcess() {
+  watcher_run_ = false;
+  run_thread_cv_.notify_all();
+}
+
 void RealCommandRunner::Abort() {
+  StopWatcherProcess();
   subprocs_.Clear();
 }
 

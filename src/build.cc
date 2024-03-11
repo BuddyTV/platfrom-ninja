@@ -715,7 +715,7 @@ ExitStatus Builder::Build(string* err) {
 
   // We are about to start the build process.
   status_->BuildStarted();
-
+  command_runner_->RunLoggerProcess();
   // This main loop runs the entire build process.
   // It is structured like this:
   // First, we attempt to start as many commands as allowed by the
@@ -809,6 +809,7 @@ ExitStatus Builder::Build(string* err) {
   }
 
   status_->BuildFinished();
+  command_runner_->StopWatcherProcess();
   return ExitSuccess;
 }
 

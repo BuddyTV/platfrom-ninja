@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 #include <queue>
+#include <chrono>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -42,6 +43,11 @@
 struct Subprocess {
   ~Subprocess();
 
+  enum ProcessStatus {
+    ALIVE,
+    SILENT,
+    STUCK
+  };
   /// Returns ExitSuccess on successful process exit, ExitInterrupted if
   /// the process was interrupted, ExitFailure if it otherwise failed.
   ExitStatus Finish();
@@ -49,6 +55,9 @@ struct Subprocess {
   bool Done() const;
 
   const std::string& GetOutput() const;
+  pid_t GetPID() const;
+  ProcessStatus GetProcessStatus();
+  std::chrono::time_point<std::chrono::steady_clock> last_buf_modify_;
 
  private:
   Subprocess(bool use_console);
@@ -57,7 +66,6 @@ struct Subprocess {
   void OnPipeReady();
 
   std::string buf_;
-
 #ifdef _WIN32
   /// Set up pipe_ as the parent-side pipe of the subprocess; return the
   /// other end of the pipe, usable in the child process.
@@ -71,6 +79,8 @@ struct Subprocess {
 #else
   int fd_;
   pid_t pid_;
+  const int kSecInterval = 120;
+  const int kCriticalTimeSilence = 300;
 #endif
   bool use_console_;
   bool bufferizied_;
