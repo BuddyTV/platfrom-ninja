@@ -126,6 +126,9 @@ std::string GetLastErrorString();
 
 /// Calls Fatal() with a function name and GetLastErrorString.
 NORETURN void Win32Fatal(const char* function, const char* hint = NULL);
+#else
+const std::string kCleanConsoleSymbol = "\033[0J";
+const std::string kCleanLineSymbol = "\033[0K";
 #endif
 
 #endif  // NINJA_UTIL_H_

@@ -111,8 +111,7 @@ void StatusPrinter::BuildEdgeFinished(Edge* edge, int64_t end_time_millis,
     // Fix extra CR being added on Windows, writing out CR CR LF (#773)
     _setmode(_fileno(stdout), _O_BINARY);  // Begin Windows extra CR fix
 #endif
-
-    printer_.PrintOnNewLine(final_output);
+    printer_.PrintOnNewLine(kCleanConsoleSymbol + final_output);
 
 #ifdef _WIN32
     _setmode(_fileno(stdout), _O_TEXT);  // End Windows extra CR fix

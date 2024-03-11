@@ -24,7 +24,6 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <spawn.h>
-
 #if defined(USE_PPOLL)
 #include <poll.h>
 #else
@@ -36,9 +35,12 @@ extern char** environ;
 #include "util.h"
 
 using namespace std;
+using namespace chrono;
 
 Subprocess::Subprocess(bool use_console) : fd_(-1), pid_(-1), bufferizied_(false), file_(NULL),
-                                           use_console_(use_console) {}
+                                           use_console_(use_console) {
+  last_buf_modify_ = steady_clock::now();
+}
 
 Subprocess::Subprocess(bool use_console, bool bufferizied, std::string filename):
     Subprocess(use_console) {
@@ -143,11 +145,26 @@ bool Subprocess::Start(SubprocessSet* set, const string& command) {
   return true;
 }
 
+const pid_t Subprocess::GetPID() {
+  return pid_;
+}
+
+Subprocess::ProcessStatus Subprocess::GetProcessStatus() {
+  auto elapsed_seconds = duration_cast<seconds>(steady_clock::now() - last_buf_modify_).count();
+  if (elapsed_seconds > kCriticalTimeSilence) {
+    return Subprocess::STUCK;
+  } else if (elapsed_seconds > kSecInterval) {
+    return Subprocess::SILENT;
+  }
+  return Subprocess::ALIVE;
+}
+
 void Subprocess::OnPipeReady() {
   char buf[4 << 10];
   int len = read(fd_, buf, sizeof(buf));
   if (len > 0) {
     if (bufferizied_) {
+      last_buf_modify_ = steady_clock::now();
       buf_.append(buf, len);
     } else {
       printf("%.*s", len, buf);

@@ -25,6 +25,16 @@
 #include <ctime>
 #include <cmath>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <thread>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #if defined(__SVR4) && defined(__sun)
 #include <sys/termios.h>
@@ -45,7 +55,7 @@
 #include "disk_interface.h"
 
 using namespace std;
-
+using namespace chrono;
 namespace {
 
 /// A CommandRunner that doesn't actually run the commands.
@@ -575,9 +585,15 @@ void Plan::Dump() const {
 
 struct VizioLog {
   string FormatTargetName(string name);
+  string& AddCleaningLine(string& data);
+  string getLastNotEmptyLine(string& buffer);
   private:
     friend struct RealCommandRunner;
 };
+
+string& VizioLog::AddCleaningLine(string& data){
+  return data.append(kCleanLineSymbol).append("\n");
+}
 
 string VizioLog::FormatTargetName(string name){
   string::size_type pos = name.rfind("___");
@@ -591,20 +607,127 @@ string VizioLog::FormatTargetName(string name){
   return name;
 }
 
+string VizioLog::getLastNotEmptyLine(string& buffer) {
+  auto found = buffer.size();
+  string currentStr = {};
+  do {
+    buffer = buffer.substr(0, found);
+    found = buffer.rfind("\n");
+    currentStr = buffer.substr(found+1);
+  } while (currentStr.empty());
+  // Buffer contains only one line
+  if (found == string::npos) {
+    return buffer;
+  }
+  // Get last part after \r
+  found = currentStr.rfind("\r");
+  if (found != string::npos) {
+    currentStr = currentStr.substr(found+1);
+  };
+
+  return currentStr;
+}
+
 struct RealCommandRunner : public CommandRunner {
   explicit RealCommandRunner(const BuildConfig& config) : config_(config) {}
-  virtual ~RealCommandRunner() {}
+  virtual ~RealCommandRunner();
   virtual size_t CanRunMore() const;
   virtual bool StartCommand(Edge* edge);
   virtual bool WaitForCommand(Result* result);
   virtual vector<Edge*> GetActiveEdges();
   virtual void Abort();
+  void RunLoggerProcess();
+  void WatchBuildingProcess();
+  void StopWatcherProcess();
+  string CreateProgressBanner(const vector<tuple<pid_t,string,string>>& progressBar);
 
   const BuildConfig& config_;
   SubprocessSet subprocs_;
   map<const Subprocess*, Edge*> subproc_to_edge_;
   VizioLog processLogger_;
+  thread watcherThread_;
+  mutex run_thread_mutex_;
+  condition_variable run_thread_cv_;
+  atomic_bool watcher_run_;
 };
+
+RealCommandRunner::~RealCommandRunner() {
+  if (watcherThread_.joinable()) {
+    watcherThread_.join();
+  }
+}
+
+string RealCommandRunner::CreateProgressBanner(const vector<tuple<pid_t,string,string>>& progressBar) {
+  if (progressBar.empty())
+    return {};
+
+  string fullBanner;
+  int bufferLines = progressBar.size() + 2; // The first and last line of bunner ###
+  winsize size;
+  if ((ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0) && size.ws_col) {
+    string decorateLine = (string(size.ws_col, '#')).append("\n");
+    fullBanner.append(decorateLine);
+    for (auto const& [pid, name, log] : progressBar) {
+      fullBanner.append(ElideMiddle("# " + to_string(pid) + " " + name + ": " + log, size.ws_col));
+    }
+    fullBanner.append(decorateLine);
+  }
+  return fullBanner + kCleanConsoleSymbol + "\033["+ to_string(bufferLines) + "A";
+}
+
+void RealCommandRunner::WatchBuildingProcess() {
+  while (watcher_run_) {
+
+    vector<tuple<pid_t,string,string>> progressBar;
+    if (!subprocs_.running_.empty()) {
+      for (auto &subproc : subprocs_.running_ ) {
+        if (subproc->GetPID() > 0) {
+          auto e = subproc_to_edge_.find(subproc);
+          string processGoal = processLogger_.FormatTargetName(e->second->rule_->name());
+          string message;
+          switch (subproc->GetProcessStatus()) {
+            case Subprocess::ALIVE: {
+              string output = subproc->GetOutput();
+              message = output.empty() ? "Is starting..." : processLogger_.getLastNotEmptyLine(output);
+            }
+            break;
+            case Subprocess::SILENT: {
+              message = "Keep silence";
+            }
+            break;
+            case Subprocess::STUCK: {
+              message = "Process keep silence more than 5 minutes. You can kill it manually or keep waiting.";
+            }
+            break;
+            default:
+              std::cout << "ERROR: Wrong Process status" << std::endl;
+            break;
+          }
+          if (!message.empty()) {
+            progressBar.push_back(make_tuple(subproc->GetPID(), processGoal, processLogger_.AddCleaningLine(message)));
+          }
+        }
+      }
+    }
+    if (!progressBar.empty()) {
+      cout << CreateProgressBanner(progressBar);
+      progressBar.clear();
+    }
+
+    std::unique_lock<std::mutex> lock(run_thread_mutex_);
+    run_thread_cv_.wait_for(lock, std::chrono::seconds(5), [this]{return !watcher_run_;});
+  }
+}
+
+void RealCommandRunner::RunLoggerProcess() {
+  // Banner anavailable in sync or quiet mode and also when build running on remote servers
+  auto *env = std::getenv("NO_TTY");
+  string no_tty = (env != nullptr) ? env : "";
+  if (config_.enable_bufferization && no_tty != "1") {
+    watcher_run_ = true;
+    watcherThread_ = thread(&RealCommandRunner::WatchBuildingProcess, this);
+  }
+}
 
 vector<Edge*> RealCommandRunner::GetActiveEdges() {
   vector<Edge*> edges;
@@ -614,7 +737,13 @@ vector<Edge*> RealCommandRunner::GetActiveEdges() {
   return edges;
 }
 
+void RealCommandRunner::StopWatcherProcess() {
+  watcher_run_ = false;
+  run_thread_cv_.notify_all();
+}
+
 void RealCommandRunner::Abort() {
+  StopWatcherProcess();
   subprocs_.Clear();
 }
 
@@ -801,7 +930,7 @@ bool Builder::Build(string* err) {
 
   // We are about to start the build process.
   status_->BuildStarted();
-
+  command_runner_->RunLoggerProcess();
   // This main loop runs the entire build process.
   // It is structured like this:
   // First, we attempt to start as many commands as allowed by the
@@ -893,6 +1022,7 @@ bool Builder::Build(string* err) {
   }
 
   status_->BuildFinished();
+  command_runner_->StopWatcherProcess();
   return true;
 }
 
