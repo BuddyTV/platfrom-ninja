@@ -715,7 +715,7 @@ void RealCommandRunner::WatchBuildingProcess() {
     }
 
     std::unique_lock<std::mutex> lock(run_thread_mutex_);
-    run_thread_cv_.wait_for(lock, std::chrono::seconds(5), [this]{return !watcher_run_;});
+    run_thread_cv_.wait_for(lock, std::chrono::seconds(1), [this]{return !watcher_run_;});
   }
 }
 
@@ -723,7 +723,7 @@ void RealCommandRunner::RunLoggerProcess() {
   // Banner anavailable in sync or quiet mode and also when build running on remote servers
   auto *env = std::getenv("NO_TTY");
   string no_tty = (env != nullptr) ? env : "";
-  if (config_.enable_bufferization && no_tty != "1") {
+  if (config_.verbosity == BuildConfig::VERBOSE && config_.enable_bufferization && no_tty != "1") {
     watcher_run_ = true;
     watcherThread_ = thread(&RealCommandRunner::WatchBuildingProcess, this);
   }
