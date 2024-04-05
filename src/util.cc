@@ -209,7 +209,7 @@ void CanonicalizePath(char* path, size_t* len, uint64_t* slash_bits) {
     }
 #endif
     // Position for next loop iteration.
-    (IsPathSeparator(next_sep[0])) ? src_next = next_sep + 1 : src_next = next_sep;
+    src_next = IsPathSeparator(next_sep[0]) ? next_sep + 1 : next_sep;
     // Length of the component, excluding trailing directory.
     size_t component_len = next_sep - src;
 
