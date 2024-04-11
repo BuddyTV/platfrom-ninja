@@ -190,8 +190,12 @@ void CanonicalizePath(char* path, size_t* len, uint64_t* slash_bits) {
     const char* next_sep =
         static_cast<const char*>(::memchr(src, '/', end - src));
     if (!next_sep) {
-      // This is the last component, will be handled out of the loop.
-      break;
+      if (src + 3 <= end && src[0] == '.' && src[1] == '.') {
+        next_sep = static_cast<const char*>(&src[2]);
+      } else {
+        // This is the last component, will be handled out of the loop.
+        break;
+      }
     }
 #else
     // Need to check for both '/' and '\\' so do not use memchr().
@@ -205,18 +209,18 @@ void CanonicalizePath(char* path, size_t* len, uint64_t* slash_bits) {
     }
 #endif
     // Position for next loop iteration.
-    src_next = next_sep + 1;
+    src_next = IsPathSeparator(next_sep[0]) ? next_sep + 1 : next_sep;
     // Length of the component, excluding trailing directory.
     size_t component_len = next_sep - src;
 
-    if (component_len <= 2) {
+    if (component_len <= 3) {
       if (component_len == 0) {
         continue;  // Ignore empty component, e.g. 'foo//bar' -> 'foo/bar'.
       }
       if (src[0] == '.') {
         if (component_len == 1) {
           continue;  // Ignore '.' component, e.g. './foo' -> 'foo'.
-        } else if (src[1] == '.') {
+        } else if (src[1] == '.' && src[2] == '/') {
           // Process the '..' component if found. Back up if possible.
           if (component_count > 0) {
             // Move back to start of previous component.
