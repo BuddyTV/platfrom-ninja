@@ -997,7 +997,7 @@ bool Builder::Build(string* err) {
       }
 
       if (!result.success()) {
-        failedEdges_.push_back("\"" + result.formatEdgeName + "\"");
+        failedEdges_.push_back(result.formatEdgeName);
         if (failures_allowed)
           failures_allowed--;
       }
@@ -1011,7 +1011,7 @@ bool Builder::Build(string* err) {
     if (failures_allowed == 0 && !failedEdges_.empty()) {
       std::string failedEdges = {};
       for(const string& str : failedEdges_)  {
-        failedEdges += " " + str + " ";
+        failedEdges += " \"" + str + "\" ";
       }
       if (config_.failures_allowed > 1)
         *err = "subcommands failed\n ----- These parts have an errors: " + failedEdges + " -----";
@@ -1038,9 +1038,9 @@ void Builder::WriteFailedParts(vector<string>* failedEdges) {
   ofstream error_file(file_path.c_str());
   string error_string = {};
   for(const string& str : *failedEdges)  {
-    error_string.append(str + ", ");
+    error_string.append(str + " ");
   }
-  error_file << error_string.substr(0, error_string.size()-2); // Delete last , from the end of string
+  error_file << error_string;
   error_file.close();
 }
 
