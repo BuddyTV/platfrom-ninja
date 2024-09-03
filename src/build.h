@@ -260,7 +260,7 @@ struct Builder {
   bool ExtractDeps(CommandRunner::Result* result, const std::string& deps_type,
                    const std::string& deps_prefix,
                    std::vector<Node*>* deps_nodes, std::string* err);
-
+  void WriteFailedParts(std::vector<std::string>* failedEdges);
   /// Map of running edge to time the edge started running.
   typedef std::map<const Edge*, int> RunningEdgeMap;
   RunningEdgeMap running_edges_;
@@ -271,7 +271,7 @@ struct Builder {
   std::string lock_file_path_;
   DiskInterface* disk_interface_;
   DependencyScan scan_;
-  std::string failedEdges_;
+  std::vector<std::string> failedEdges_;
 
   // Unimplemented copy ctor and operator= ensure we don't copy the auto_ptr.
   Builder(const Builder &other);        // DO NOT IMPLEMENT
