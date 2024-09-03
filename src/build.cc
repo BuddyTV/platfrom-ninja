@@ -784,7 +784,7 @@ ExitStatus Builder::Build(string* err) {
       }
 
       if (!result.success()) {
-        failedEdges_ += " \"" + result.formatEdgeName + "\" ";
+        failedEdges_.push_back(result.formatEdgeName);
         if (failures_allowed)
           failures_allowed--;
       }
@@ -795,11 +795,18 @@ ExitStatus Builder::Build(string* err) {
 
     // If we get here, we cannot make any more progress.
     status_->BuildFinished();
-    if (failures_allowed == 0) {
+    if (failures_allowed == 0 && !failedEdges_.empty()) {
+      std::string failedEdges = {};
+      for(const string& str : failedEdges_)  {
+        failedEdges += " \"" + str + "\" ";
+      }
       if (config_.failures_allowed > 1)
-        *err = "subcommands failed\n ----- These parts have an errors: " + failedEdges_ + " -----";
+        *err = "subcommands failed\n ----- These parts have an errors: " + failedEdges + " -----";
       else
-        *err = "subcommand failed\n ----- This part has an error: " + failedEdges_ + " -----";
+        *err = "subcommand failed\n ----- This part has an error: " + failedEdges + " -----";
+      if (config_.logfiles_enabled) {
+        WriteFailedParts(&failedEdges_);
+      }
     } else if (failures_allowed < config_.failures_allowed)
       *err = "cannot make progress due to previous errors";
     else
@@ -811,6 +818,17 @@ ExitStatus Builder::Build(string* err) {
   status_->BuildFinished();
   command_runner_->StopWatcherProcess();
   return ExitSuccess;
+}
+
+void Builder::WriteFailedParts(vector<string>* failedEdges) {
+  string file_path = config_.logs_dir + "/failed_parts";
+  ofstream error_file(file_path.c_str());
+  string error_string = {};
+  for(const string& str : *failedEdges)  {
+    error_string.append(str + " ");
+  }
+  error_file << error_string;
+  error_file.close();
 }
 
 bool Builder::StartEdge(Edge* edge, string* err) {

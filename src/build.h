@@ -269,7 +269,7 @@ struct Builder {
   bool ExtractDeps(CommandRunner::Result* result, const std::string& deps_type,
                    const std::string& deps_prefix,
                    std::vector<Node*>* deps_nodes, std::string* err);
-
+  void WriteFailedParts(std::vector<std::string>* failedEdges);
   /// Map of running edge to time the edge started running.
   typedef std::map<const Edge*, int> RunningEdgeMap;
   RunningEdgeMap running_edges_;
@@ -284,7 +284,7 @@ struct Builder {
   std::unique_ptr<Explanations> explanations_;
 
   DependencyScan scan_;
-  std::string failedEdges_;
+  std::vector<std::string> failedEdges_;
 
   /// Keep the global exit code for the build
   ExitStatus exit_code_ = ExitSuccess;
