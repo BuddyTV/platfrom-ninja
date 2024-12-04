@@ -596,15 +596,29 @@ string& VizioLog::AddCleaningLine(string& data){
 }
 
 string VizioLog::FormatTargetName(string name){
+  // Example of build part name: name__core_shared_sysroot_sysroot_openssl___build_gn_toolchain_arm__rule
   string::size_type pos = name.rfind("___");
+  string format_name = name;
   if (pos != string::npos) {
+    // name = name__core_shared_sysroot_sysroot_openssl
     name = name.substr(0, pos);
     pos = name.rfind("_");
     if (pos != string::npos) {
-      name = name.substr(pos+1);
+      // format_name = openssl
+      format_name = name.substr(pos+1);
+      // name = name__core_shared_sysroot_sysroot
+      name = name.substr(0, pos);
+      pos = name.rfind("_");
+      if (pos != string::npos) {
+        // snap_name = sysroot
+        string snap_name = name.substr(pos+1);
+        if (format_name != snap_name) {
+          format_name = snap_name + ":" + format_name;
+        }
+      }
     }
   }
-  return name;
+  return format_name;
 }
 
 string VizioLog::getLastNotEmptyLine(string& buffer) {
