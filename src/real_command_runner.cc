@@ -50,15 +50,29 @@ std::string& VizioLog::AddCleaningLine(std::string& data){
 }
 
 std::string VizioLog::FormatTargetName(std::string name){
-  std::string::size_type pos = name.find("___");
+  // Example of build part name: name__core_shared_sysroot_sysroot_openssl___build_gn_toolchain_arm__rule
+  std::string::size_type pos = name.rfind("___");
+  std::string format_name = name;
   if (pos != std::string::npos) {
+    // name = name__core_shared_sysroot_sysroot_openssl
     name = name.substr(0, pos);
     pos = name.rfind("_");
     if (pos != std::string::npos) {
-      name = name.substr(pos+1);
+      // format_name = openssl
+      format_name = name.substr(pos+1);
+      // name = name__core_shared_sysroot_sysroot
+      name = name.substr(0, pos);
+      pos = name.rfind("_");
+      if (pos != std::string::npos) {
+        // snap_name = sysroot
+        std::string snap_name = name.substr(pos+1);
+        if (format_name != snap_name) {
+          format_name = snap_name + ":" + format_name;
+        }
+      }
     }
   }
-  return name;
+  return format_name;
 }
 
 std::string VizioLog::getLastNotEmptyLine(std::string& buffer) {
